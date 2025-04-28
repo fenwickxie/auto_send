@@ -20,7 +20,7 @@ app_name: str = f"auto_send_{system_name}_{machine_arch}_v{version}"
 
 # 打包配置
 auto_send_build = [
-    "./main.py",  # 主入口文件
+    "./src/main.py",  # 主入口文件
     f"--name={app_name}",  # 输出文件名
     "--onefile",
     "--windowed",

@@ -10,8 +10,8 @@
 
 import sys
 from PyQt5.QtWidgets import QApplication
-from auto_send.src.gui import WeChatSchedulerUI
-from auto_send.src.scheduler import WeChatScheduler
+from gui import WeChatSchedulerUI
+from scheduler import WeChatScheduler
 import logging
 
 if __name__ == "__main__":

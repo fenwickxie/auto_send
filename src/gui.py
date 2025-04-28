@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
     QKeySequenceEdit,
     QSpinBox,  # 添加 QSpinBox 用于时间偏移输入
 )
-from auto_send.src.scheduler import STATUS, IDLE, RUNNING
+from scheduler import STATUS, IDLE, RUNNING
 
 
 class WeChatSchedulerUI(QMainWindow):
@@ -344,7 +344,7 @@ class WeChatSchedulerUI(QMainWindow):
         stop_btn_state = self.stop_btn.isEnabled()
 
         # 执行发送，不改变定时任务状态
-        self.scheduler.send_message_now(target, content)
+        self.scheduler.message_send_immed(target, content)
 
         # 恢复按钮状态
         self.start_btn.setEnabled(start_btn_state)

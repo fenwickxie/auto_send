@@ -13,7 +13,6 @@ import time
 from datetime import datetime
 
 import keyboard
-import pyautogui
 from PyQt5.QtCore import QTimer, QObject, pyqtSignal
 
 IDLE = 0
@@ -24,7 +23,6 @@ STATUS = {IDLE: "空闲中", RUNNING: "运行中"}
 class WeChatScheduler(QObject):
     log_signal = pyqtSignal(str)  # 日志信号
     status_signal = pyqtSignal(int)  # 状态信号
-    start_timer_signal = pyqtSignal(int)  # 启动定时器信号（以毫秒为单位）
 
     def __init__(self):
         super().__init__()
@@ -34,19 +32,23 @@ class WeChatScheduler(QObject):
         self.is_running = False
         self.schedule_thread = None
         self.current_window = None
-        self.preparation_time = 5.0  # 预估准备操作需要的时间(秒)
+        self.prepare_time = 10.0  # 预估准备操作需要的时间(秒)
         self.once_schedule = False
-
-        # 连接信号到槽
-        self.start_timer_signal.connect(self.start_timer)
 
         # 消息内容缓存
         self.target = ""
         self.content = ""
         self.shortcuts = {
-            "open_wechat": "ctrl+alt+w",
+            # "open_wechat": "ctrl+alt+w",
             "open_search": "alt+f",
             "send_message": "ctrl+enter",
+        }
+        self.delays = {
+            # "window_delay": 0.8,
+            "search_delay": 1.0,
+            "search_result_delay": 1.5,
+            "chat_delay": 1,
+            "line_delay": 0.1,
         }
 
     def update_shortcuts(self, shortcuts):
@@ -54,9 +56,14 @@ class WeChatScheduler(QObject):
         self.shortcuts.update(shortcuts)
         self.log_signal.emit(f"快捷键已更新: {self.shortcuts}")
 
+    def update_delays(self, delays):
+        """更新延时设置"""
+        self.delays.update(delays)
+        self.log_signal.emit(f"延时设置已更新: {self.delays}")
+
     def start_once_schedule(self, target, content, scheduled_time):
         """启动一次性定时任务"""
-        self.once_schedule = True  # 设置一次性任务标志
+        self.once_schedule = True
         if not self.validate_inputs(target, content, scheduled_time):
             return
 
@@ -69,30 +76,26 @@ class WeChatScheduler(QObject):
         self.log_signal.emit("启动一次性定时任务")
 
         now = datetime.now()
-        seconds_left = (self.scheduled_time - now).total_seconds()
+        seconds_remain = (self.scheduled_time - now).total_seconds()
 
-        if seconds_left > self.preparation_time:
-            # 提前准备消息
-            delay_time = seconds_left - self.preparation_time
-            self.log_signal.emit(f"将在 {delay_time:.1f} 秒后开始准备消息")
-            threading.Timer(
-                delay_time,
-                lambda: self.message_schedule(self.scheduled_time),
-            ).start()
+        if seconds_remain > self.prepare_time:
+
+            delay_ms = int((seconds_remain - self.prepare_time) * 1000)
+            # delay_time = seconds_remain - self.prepare_time
+            self.log_signal.emit(f"将在 {delay_ms/1000.0:.2f} 秒后开始准备消息")
+            # self.log_signal.emit(f"将在 {delay_time:.2f} 秒后开始准备消息")
+            QTimer.singleShot(
+                delay_ms, lambda: self.message_schedule(self.scheduled_time)
+            )
+            # threading.Timer(
+            #     delay_time, self.message_schedule, [self.scheduled_time]
+            # ).start()
         else:
-            # 时间太紧，立即准备
             self.log_signal.emit("时间紧张，立即开始准备消息")
             self.message_schedule(self.scheduled_time)
-
-        # 确保任务完成后状态更新
-        self.timer.timeout.connect(self._on_once_task_complete)
-
-    def _on_once_task_complete(self):
-        """一次性任务完成后的清理操作"""
-        self.log_signal.emit("一次性任务完成，清理状态")
-        self.timer.stop()
-        self.is_running = False
-        self.status_signal.emit(IDLE)
+        # self._on_once_task_complete()
+        # # 确保任务完成后状态更新
+        # self.timer.timeout.connect(self._on_once_task_complete)
 
     def start_repeating_schedule(self, target, content, days, send_time, repeat_type):
         """启动循环定时任务"""
@@ -105,7 +108,7 @@ class WeChatScheduler(QObject):
 
         self.target = target
         self.content = content
-        self.is_running = True 
+        self.is_running = True
         self.status_signal.emit(RUNNING)
         self.log_signal.emit("启动循环定时任务")
 
@@ -128,14 +131,18 @@ class WeChatScheduler(QObject):
                 # 检查是否是选定的日期或工作日
                 if repeat_type == 0:  # 按日期
                     if now.day not in days:
-                        self.log_signal.emit(f"当前日期 {now.day} 不在选定日期 {days} 中")
-                        time.sleep(1)
+                        # self.log_signal.emit(
+                        #     f"当前日期 {now.day} 不在选定日期 {days} 中"
+                        # )
+                        time.sleep(3)
                         continue
                 elif repeat_type == 1:  # 按工作日
                     weekday = now.weekday()
                     if weekday not in days:
-                        self.log_signal.emit(f"当前工作日 {weekday} 不在选定工作日 {days} 中")
-                        time.sleep(1)
+                        # self.log_signal.emit(
+                        #     f"当前工作日 {weekday} 不在选定工作日 {days} 中"
+                        # )
+                        time.sleep(3)
                         continue
 
                 # 检查时间是否匹配
@@ -149,20 +156,23 @@ class WeChatScheduler(QObject):
                 # 计算等待时间
                 wait_seconds = (target_datetime - now).total_seconds()
                 self.log_signal.emit(f"距离目标时间还有 {wait_seconds:.1f} 秒")
-                if wait_seconds > self.preparation_time:
-                    self.log_signal.emit(
-                        f"等待 {wait_seconds - self.preparation_time:.1f} 秒后开始准备消息"
+                if wait_seconds > self.prepare_time:
+                    delay_ms = int((wait_seconds - self.prepare_time) * 1000)
+                    # delay_time = wait_seconds - self.prepare_time
+                    self.log_signal.emit(f"等待 {delay_ms/1000:.1f} 秒后开始准备消息")
+                    # self.log_signal.emit(f"等待 {delay_time:.2f} 秒后开始准备消息")
+                    QTimer.singleShot(
+                        delay_ms, lambda: self.message_schedule(target_datetime)
                     )
-                    for _ in range(int(wait_seconds - self.preparation_time)):
-                        if not self.is_running:
-                            self.log_signal.emit("任务已停止，退出循环")
-                            return
-                        time.sleep(1)
-                    self.message_schedule(target_datetime)
+                    # threading.Timer(
+                    #     delay_time, self.message_schedule, [self.scheduled_time]
+                    # ).start()
                 else:
-                    self.log_signal.emit("时间紧张，立即准备并发送消息")
-                    self.message_schedule(target_datetime)
-
+                    # # 立即在主线程中执行
+                    QTimer.singleShot(0, lambda: self.message_schedule(target_datetime))
+                    # threading.Timer(
+                    #     0, self.message_schedule, [self.scheduled_time]
+                    # ).start()
                 # 发送后等待一段时间再检查，避免重复发送
                 for _ in range(60):
                     if not self.is_running:
@@ -190,8 +200,8 @@ class WeChatScheduler(QObject):
         self.status_signal.emit(IDLE)
         self.log_signal.emit("定时任务已停止")
 
-        # 尝试恢复窗口状态
-        self.activate_previous_window()
+        # # 尝试恢复窗口状态
+        # self.activate_previous_window()
 
     def message_send_immed(self, target, content):
         """立即发送消息，不影响定时任务运行状态"""
@@ -221,34 +231,38 @@ class WeChatScheduler(QObject):
             self.status_signal.emit(RUNNING)
         else:
             self.status_signal.emit(IDLE)
+            # 通过进程名激活企业微信窗口
 
     def message_prepare(self):
         """预先打开聊天窗口并输入消息内容，只差发送"""
         try:
-            # 保存当前活动窗口以便后续恢复
-            self.current_window = pyautogui.getActiveWindow()
-            self.log_signal.emit("保存当前窗口状态")
+            # # 保存当前活动窗口以便后续恢复
+            # self.current_window = pyautogui.getActiveWindow()
+            # self.log_signal.emit("保存当前窗口状态")
 
-            # 打开企业微信
-            self.log_signal.emit(
-                f"模拟按下 {self.shortcuts['open_wechat']} 打开应用"
-            )
-            keyboard.press_and_release(self.shortcuts["open_wechat"])
-            time.sleep(0.8)  # 等待搜索框出现
+            # # 通过企微进程名（'WXWork.exe'）打开界面
+            # self.activate_window("WXWork.exe")
+            # time.sleep(self.delays["window_delay"])  # 等待窗口激活
+            # self.log_signal.emit("激活企业微信窗口")
+
+            # # 模拟按下快捷键打开企微
+            # keyboard.press_and_release(self.shortcuts["open_wechat"])
+            # time.sleep(0.8)  # 等待企微界面出现
+
             # 按下Alt+F打开搜索框
             self.log_signal.emit(f"模拟按下 {self.shortcuts['open_search']} 打开搜索框")
             keyboard.press_and_release(self.shortcuts["open_search"])
-            time.sleep(0.8)  # 等待搜索框出现
+            time.sleep(self.delays["search_delay"])  # 等待搜索框出现
 
             # 输入目标对话名称
             self.log_signal.emit(f"输入目标对话: {self.target}")
             keyboard.write(self.target)
-            time.sleep(1)  # 等待搜索结果
+            time.sleep(self.delays["search_result_delay"])  # 等待搜索结果
 
             # 按Enter选择第一个结果
             self.log_signal.emit("模拟按下 Enter 选择对话")
             keyboard.press_and_release("enter")
-            time.sleep(1)  # 等待对话打开
+            time.sleep(self.delays["chat_delay"])  # 等待对话打开
 
             # 输入消息内容并保持分段
             self.log_signal.emit("开始输入消息内容")
@@ -256,11 +270,11 @@ class WeChatScheduler(QObject):
                 keyboard.write(line)
                 # Shift+Enter换行
                 keyboard.press_and_release("shift+enter")
-                time.sleep(0.1)
+                time.sleep(self.delays["line_delay"])
 
-            # 删除最后一个多余的换行
-            keyboard.press_and_release("backspace")
-            time.sleep(0.1)
+            # # 删除最后一个多余的换行
+            # keyboard.press_and_release("backspace")
+            # time.sleep(0.1)
 
             self.log_signal.emit("消息准备完成，等待发送时机")
             return True
@@ -268,33 +282,37 @@ class WeChatScheduler(QObject):
         except Exception as e:
             error_msg = f"准备消息出错: {str(e)}"
             self.log_signal.emit(error_msg)
-            self.activate_previous_window()
+            # self.activate_previous_window()
             return False
 
     def message_schedule(self, target_time):
         """准备发送并启动精准定时"""
         if not self.is_running:
-
             return
 
         self.log_signal.emit("开始准备消息...")
-        if self.message_prepare() and self.is_running:
-            # 计算剩余时间
-            remaining_ms = int((target_time - datetime.now()).total_seconds() * 1000)
-            if remaining_ms > 0:
-                self.log_signal.emit(
-                    f"消息准备完成，等待 {remaining_ms:.0f} 毫秒后发送"
+        try:
+            if self.message_prepare():
+                remaining_ms = int(
+                    (target_time - datetime.now()).total_seconds() * 1000
                 )
-                self.start_timer_signal.emit(
-                    remaining_ms
-                )  # 发射信号，通知主线程启动定时器
-            else:
-                self.log_signal.emit("立即发送消息（准备时间过长）")
-                self.message_send()
+                if remaining_ms > 0:
+                    self.log_signal.emit(
+                        f"消息准备完成，等待 {remaining_ms:.0f} 毫秒后发送"
+                    )
+                    self.timer.setSingleShot(True)
+                    self.timer.start(remaining_ms)
+                else:
+                    self.log_signal.emit("立即发送消息")
+                    self.message_send()
+        except Exception as e:
+            self.log_signal.emit(f"消息准备失败: {str(e)}")
+        if self.once_schedule:
+            self.is_running = False
+            self.status_signal.emit(IDLE)
 
     def message_send(self):
         """在精确时间执行发送操作"""
-        SEND_SUCCESS = True
         try:
             self.log_signal.emit("正在执行发送操作...")
             self.log_signal.emit(f"模拟按下 {self.shortcuts['send_message']} 发送消息")
@@ -305,21 +323,21 @@ class WeChatScheduler(QObject):
 
             self.log_signal.emit(status_msg)
 
+            # 停止定时器
+            self.timer.stop()
+
         except Exception as e:
             error_msg = f"发送出错: {str(e)}"
             self.log_signal.emit(error_msg)
-            SEND_SUCCESS = False
 
         # 如果是一次性任务，停止调度器并更新状态
         if self.once_schedule:
             self.log_signal.emit("一次性任务完成，停止定时器")
-            self.timer.stop()  # 停止 QTimer
             self.is_running = False
             self.status_signal.emit(IDLE)
 
-        # 恢复之前的活动窗口
-        self.activate_previous_window()
-        return SEND_SUCCESS
+        # # 恢复之前的活动窗口
+        # self.activate_previous_window()
 
     def activate_previous_window(self):
         """恢复之前的活动窗口"""
@@ -375,7 +393,31 @@ class WeChatScheduler(QObject):
 
         return True
 
-    def start_timer(self, remaining_ms):
-        """在主线程中启动定时器"""
-        self.log_signal.emit(f"主线程启动定时器，等待 {remaining_ms} 毫秒后发送消息")
-        self.timer.start(remaining_ms)
+    def test_keyboard_operations(self, target):
+        """测试键盘操作"""
+        if not target:
+            self.log_signal.emit("错误: 请输入目标对话名称")
+            return False
+        try:
+            self.log_signal.emit("开始测试键盘操作...")
+
+            # 测试搜索框打开
+            self.log_signal.emit("测试打开搜索框...")
+            keyboard.press_and_release(self.shortcuts["open_search"])
+            time.sleep(1)
+
+            # 测试输入
+            self.log_signal.emit("测试输入...")
+            keyboard.write(target)
+            time.sleep(1)
+
+            # 测试回车
+            self.log_signal.emit("测试回车...")
+            keyboard.press_and_release("enter")
+            time.sleep(1)
+
+            self.log_signal.emit("键盘操作测试完成")
+            return True
+        except Exception as e:
+            self.log_signal.emit(f"键盘操作测试失败: {str(e)}")
+            return False

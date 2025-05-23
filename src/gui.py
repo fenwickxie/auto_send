@@ -27,6 +27,7 @@ from PyQt5.QtWidgets import (
     QPlainTextEdit,
     QKeySequenceEdit,
     QSpinBox,  # 添加 QSpinBox 用于时间偏移输入
+    QDoubleSpinBox,  # 添加 QDoubleSpinBox 用于延时设置
 )
 from scheduler import STATUS, IDLE, RUNNING
 
@@ -35,7 +36,7 @@ class WeChatSchedulerUI(QMainWindow):
     def __init__(self, scheduler):
         super().__init__()
         self.scheduler = scheduler
-        self.setWindowTitle("企业微信定时消息发送工具")
+        self.setWindowTitle("企微定时消息发送工具")
         self.setGeometry(100, 100, 900, 600)
 
         # 连接业务逻辑的信号
@@ -146,14 +147,18 @@ class WeChatSchedulerUI(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.send_now_btn = QPushButton("立即发送")
         self.send_now_btn.clicked.connect(self.send_message_now)
+        # 添加测试按钮
+        self.test_btn = QPushButton("测试键盘操作")
+        self.test_btn.clicked.connect(self.test_keyboard)
 
+        control_layout.addWidget(self.test_btn)
         control_layout.addWidget(self.start_btn)
         control_layout.addWidget(self.stop_btn)
         control_layout.addWidget(self.send_now_btn)
 
         # 状态显示
         self.status_label = QLabel("状态: 未运行")
-        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setAlignment(Qt.AlignCenter)  # type: ignore
 
         # 添加到左侧布局
         left_layout.addWidget(msg_group)
@@ -170,23 +175,85 @@ class WeChatSchedulerUI(QMainWindow):
         shortcut_group = QGroupBox("快捷键设置")
         shortcut_layout = QVBoxLayout()
 
-        self.open_wechat_label = QLabel("打开应用快捷键:")
-        self.open_wechat_input = QKeySequenceEdit(QKeySequence("Ctrl+Alt+W"))
+        # self.open_wechat_label = QLabel("打开应用快捷键:")
+        # self.open_wechat_input = QKeySequenceEdit(QKeySequence("Ctrl+Alt+W"))
         self.open_search_label = QLabel("打开搜索框快捷键:")
         self.open_search_input = QKeySequenceEdit(QKeySequence("Alt+F"))
         self.send_message_label = QLabel("发送消息快捷键:")
         self.send_message_input = QKeySequenceEdit(QKeySequence("Ctrl+Enter"))
 
-        shortcut_layout.addWidget(self.open_wechat_label)
-        shortcut_layout.addWidget(self.open_wechat_input)
+        # shortcut_layout.addWidget(self.open_wechat_label)
+        # shortcut_layout.addWidget(self.open_wechat_input)
         shortcut_layout.addWidget(self.open_search_label)
         shortcut_layout.addWidget(self.open_search_input)
         shortcut_layout.addWidget(self.send_message_label)
         shortcut_layout.addWidget(self.send_message_input)
         shortcut_group.setLayout(shortcut_layout)
 
-        # 添加到右侧布局
+        # 延时设置
+        delay_group = QGroupBox("延时设置(秒)")
+        delay_layout = QVBoxLayout()
+
+        # # 窗口激活后延时
+        # window_delay_layout = QHBoxLayout()
+        # self.window_delay_label = QLabel("窗口激活等待延时:")
+        # self.window_delay_input = QDoubleSpinBox()
+        # self.window_delay_input.setRange(0.1, 10.0)
+        # self.window_delay_input.setValue(0.8)
+        # self.window_delay_input.setSingleStep(0.1)
+        # window_delay_layout.addWidget(self.window_delay_label)
+        # window_delay_layout.addWidget(self.window_delay_input)
+
+        # 搜索框打开后延时
+        search_delay_layout = QHBoxLayout()
+        self.search_delay_label = QLabel("搜索框打开等待延时:")
+        self.search_delay_input = QDoubleSpinBox()
+        self.search_delay_input.setRange(0.1, 10.0)
+        self.search_delay_input.setValue(1.0)
+        self.search_delay_input.setSingleStep(0.1)
+        search_delay_layout.addWidget(self.search_delay_label)
+        search_delay_layout.addWidget(self.search_delay_input)
+
+        # 搜索结果等待延时
+        search_result_delay_layout = QHBoxLayout()
+        self.search_result_delay_label = QLabel("搜索结果等待延时:")
+        self.search_result_delay_input = QDoubleSpinBox()
+        self.search_result_delay_input.setRange(0.1, 10.0)
+        self.search_result_delay_input.setValue(1.5)
+        self.search_result_delay_input.setSingleStep(0.1)
+        search_result_delay_layout.addWidget(self.search_result_delay_label)
+        search_result_delay_layout.addWidget(self.search_result_delay_input)
+
+        # 对话打开后延时
+        chat_delay_layout = QHBoxLayout()
+        self.chat_delay_label = QLabel("对话打开等待延时:")
+        self.chat_delay_input = QDoubleSpinBox()
+        self.chat_delay_input.setRange(0.1, 10.0)
+        self.chat_delay_input.setValue(1.0)
+        self.chat_delay_input.setSingleStep(0.1)
+        chat_delay_layout.addWidget(self.chat_delay_label)
+        chat_delay_layout.addWidget(self.chat_delay_input)
+
+        # 每行输入后延时
+        line_delay_layout = QHBoxLayout()
+        self.line_delay_label = QLabel("每行输入等待延时:")
+        self.line_delay_input = QDoubleSpinBox()
+        self.line_delay_input.setRange(0.05, 5.0)
+        self.line_delay_input.setValue(0.1)
+        self.line_delay_input.setSingleStep(0.05)
+        line_delay_layout.addWidget(self.line_delay_label)
+        line_delay_layout.addWidget(self.line_delay_input)
+
+        # delay_layout.addLayout(window_delay_layout)
+        delay_layout.addLayout(search_delay_layout)
+        delay_layout.addLayout(search_result_delay_layout)
+        delay_layout.addLayout(chat_delay_layout)
+        delay_layout.addLayout(line_delay_layout)
+        delay_group.setLayout(delay_layout)
+
+        # 将延时设置组添加到右侧布局
         right_layout.addWidget(shortcut_group)
+        right_layout.addWidget(delay_group)
 
         self.log_label = QLabel("运行日志:")
         self.log_display = QPlainTextEdit()
@@ -204,7 +271,7 @@ class WeChatSchedulerUI(QMainWindow):
         right_panel.setLayout(right_layout)
 
         # 使用QSpliter实现可调整大小的左右面板
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Horizontal)  # type: ignore
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 3)
@@ -280,11 +347,20 @@ class WeChatSchedulerUI(QMainWindow):
 
         # 更新快捷键设置
         shortcuts = {
-            "open_wechat": self.open_wechat_input.keySequence().toString(),
+            # "open_wechat": self.open_wechat_input.keySequence().toString(),
             "open_search": self.open_search_input.keySequence().toString(),
             "send_message": self.send_message_input.keySequence().toString(),
         }
         self.scheduler.update_shortcuts(shortcuts)
+        # 更新延时设置
+        delays = {
+            # "window_delay": self.window_delay_input.value(),
+            "search_delay": self.search_delay_input.value(),
+            "search_result_delay": self.search_result_delay_input.value(),
+            "chat_delay": self.chat_delay_input.value(),
+            "line_delay": self.line_delay_input.value(),
+        }
+        self.scheduler.update_delays(delays)
 
         if self.once_checkbox.isChecked():
             scheduled_time = (
@@ -304,7 +380,7 @@ class WeChatSchedulerUI(QMainWindow):
             self.scheduler.start_repeating_schedule(
                 target,
                 content,
-                days,
+                days,  # type: ignore
                 send_time,
                 self.repeat_type.currentIndex(),
             )
@@ -354,8 +430,8 @@ class WeChatSchedulerUI(QMainWindow):
         """追加日志到显示区域"""
         self.log_display.appendPlainText(message)
         # 自动滚动到底部
-        self.log_display.verticalScrollBar().setValue(
-            self.log_display.verticalScrollBar().maximum()
+        self.log_display.verticalScrollBar().setValue(  # type: ignore
+            self.log_display.verticalScrollBar().maximum()  # type: ignore
         )
 
     def update_status(self, status):
@@ -367,7 +443,14 @@ class WeChatSchedulerUI(QMainWindow):
         """清除日志"""
         self.log_display.clear()
 
-    def closeEvent(self, event):
+    def closeEvent(self, event):  # type: ignore
         """窗口关闭事件"""
         self.scheduler.stop_scheduler()
         event.accept()
+
+    def test_keyboard(self):
+        """测试键盘操作"""
+        if self.scheduler.test_keyboard_operations(self.target_input.text().strip()):
+            self.append_log("键盘操作测试成功！")
+        else:
+            self.append_log("键盘操作测试失败！")

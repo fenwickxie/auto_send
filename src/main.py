@@ -3,7 +3,7 @@
 """
 @Project : officeauto 
 @File    : main.py
-@IDE     : PyCharm 
+@IDE     : vscode 
 @Author  : xie.fangyu
 @Date    : 2025/3/31 下午1:58 
 """

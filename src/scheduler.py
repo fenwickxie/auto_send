@@ -11,9 +11,9 @@
 import threading
 import time
 from datetime import datetime
-import win32gui
-
-import keyboard
+from config import SHORTCUTS, DELAYS, WECHAT_WINDOW_TITLE
+from utils import async_log, format_time
+import wechat_ops
 from PyQt5.QtCore import QTimer, QObject, pyqtSignal, QMutex, QMutexLocker
 
 IDLE = 0
@@ -25,7 +25,7 @@ class WeChatScheduler(QObject):
     log_signal = pyqtSignal(str)  # 日志信号
     status_signal = pyqtSignal(int)  # 状态信号
 
-    # 新增信号用于主线程定时器操作
+    # 用于主线程定时器操作
     start_timer_signal = pyqtSignal(int)
 
     def __init__(self):
@@ -41,18 +41,8 @@ class WeChatScheduler(QObject):
         self.target = ""
         self.content = ""
         self.window_title = "企业微信"
-        self.shortcuts = {
-            "open_search": "alt+s",
-            "send_message": "ctrl+enter",
-        }
-        self.delays = {
-            "prepare_pre_time": 10.0,  # 消息准备提前时间
-            "window_active_delay": 1.0,  # 窗口激活等待延时
-            "search_delay": 1.0,
-            "search_result_delay": 1.5,
-            "chat_delay": 1,
-            "line_delay": 0.1,
-        }
+        self.shortcuts = SHORTCUTS.copy()
+        self.delays = DELAYS.copy()
 
         # 添加线程锁
         self.mutex = QMutex()
@@ -250,54 +240,25 @@ class WeChatScheduler(QObject):
         def prepare_job():
             max_retries = 3
             retry_count = 0
-            self._async_log(f"开始准备消息 - 目标: {self.target}, 内容长度: {len(self.content)} 字符")
+            async_log(self.log_signal, f"开始准备消息 - 目标: {self.target}, 内容长度: {len(self.content)} 字符")
             while retry_count < max_retries:
                 try:
-                    wechat_window = win32gui.FindWindow(None, self.window_title)
-                    if wechat_window:
-                        self._async_log(f"找到{self.window_title}窗口，尝试激活")
-                        win32gui.SetForegroundWindow(wechat_window)
-                        time.sleep(self.delays["window_active_delay"])
-                        self._async_log(f"窗口已等待激活 {self.delays['window_active_delay']}秒")
-                    else:
-                        self._async_log(f"警告: 未找到{self.window_title}窗口")
-                    self._async_log(f"[第{retry_count+1}次尝试] 模拟按下 {self.shortcuts['open_search']} 打开搜索框")
-                    keyboard.press_and_release(self.shortcuts["open_search"])
-                    time.sleep(self.delays["search_delay"])
-                    self._async_log(f"搜索框已等待 {self.delays['search_delay']}秒")
-                    self._async_log(f"输入目标对话: {self.target}")
-                    keyboard.write(self.target)
-                    time.sleep(self.delays["search_result_delay"])
-                    self._async_log(f"搜索结果已等待 {self.delays['search_result_delay']}秒")
-                    self._async_log("模拟按下 Enter 选择对话")
-                    keyboard.press_and_release("enter")
-                    time.sleep(self.delays["chat_delay"])
-                    self._async_log(f"聊天窗口已等待 {self.delays['chat_delay']}秒")
-                    chat_window = win32gui.GetForegroundWindow()
-                    if not chat_window:
-                        self._async_log("警告: 未能获取聊天窗口句柄")
-                        time.sleep(0.5)
-                    self._async_log("开始输入消息内容，共 {} 行".format(len(self.content.split("\n"))))
-                    for i, line in enumerate(self.content.split("\n")):
-                        try:
-                            keyboard.write(line)
-                            time.sleep(0.1)
-                            keyboard.press_and_release("shift+enter")
-                            time.sleep(self.delays["line_delay"])
-                            if (i + 1) % 5 == 0:
-                                self._async_log(f"已输入 {i+1}/{len(self.content.split('\\n'))} 行")
-                        except Exception as line_e:
-                            self._async_log(f"输入第 {i+1} 行时出错: {str(line_e)}，尝试继续")
-                            time.sleep(0.5)
-                    self._async_log("消息准备完成，等待发送时机")
+                    if not wechat_ops.activate_wechat(self.window_title, self.delays["window_active_delay"]):
+                        async_log(self.log_signal, f"警告: 未找到{self.window_title}窗口")
+                    async_log(self.log_signal, f"[第{retry_count+1}次尝试] 模拟按下 {self.shortcuts['open_search']} 打开搜索框")
+                    wechat_ops.search_and_select_chat(self.target, self.shortcuts, self.delays)
+                    async_log(self.log_signal, f"输入目标对话: {self.target}")
+                    async_log(self.log_signal, f"开始输入消息内容，共 {len(self.content.split('\n'))} 行")
+                    wechat_ops.input_message_content(self.content, self.delays)
+                    async_log(self.log_signal, "消息准备完成，等待发送时机")
                     result['success'] = True
                     return
                 except Exception as e:
                     retry_count += 1
                     error_msg = f"准备消息出错: {str(e)}, 错误类型: {type(e).__name__}, 重试 ({retry_count}/{max_retries})"
-                    self._async_log(error_msg)
+                    async_log(self.log_signal, error_msg)
                     time.sleep(1.0)
-            self._async_log(f"消息准备失败，已达到最大重试次数 {max_retries}")
+            async_log(self.log_signal, f"消息准备失败，已达到最大重试次数 {max_retries}")
             result['success'] = False
         t = threading.Thread(target=prepare_job)
         t.daemon = True
@@ -306,8 +267,7 @@ class WeChatScheduler(QObject):
         return result['success']
 
     def _async_log(self, message):
-        """日志异步写入"""
-        threading.Thread(target=lambda: self.log_signal.emit(message), daemon=True).start()
+        async_log(self.log_signal, message)
 
     def message_schedule(self, target_time):
         """准备发送并启动精准定时"""
@@ -364,8 +324,8 @@ class WeChatScheduler(QObject):
                 try:
                     self._async_log(f"[第{retry_count+1}次尝试] 正在执行发送操作...")
                     self._async_log(f"模拟按下 {self.shortcuts['send_message']} 发送消息")
-                    keyboard.press_and_release(self.shortcuts["send_message"])
-                    send_time = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+                    wechat_ops.send_message(self.shortcuts)
+                    send_time = format_time()
                     status_msg = f"消息已于 ({send_time}) 发送完成"
                     self._async_log(status_msg)
                     self.timer.stop()
@@ -451,22 +411,8 @@ class WeChatScheduler(QObject):
             return False
         try:
             self.log_signal.emit("开始测试键盘操作...")
-
-            # 测试搜索框打开
             self.log_signal.emit("测试打开搜索框...")
-            keyboard.press_and_release(self.shortcuts["open_search"])
-            time.sleep(1)
-
-            # 测试输入
-            self.log_signal.emit("测试输入...")
-            keyboard.write(target)
-            time.sleep(1)
-
-            # 测试回车
-            self.log_signal.emit("测试回车...")
-            keyboard.press_and_release("enter")
-            time.sleep(1)
-
+            wechat_ops.search_and_select_chat(target, self.shortcuts, self.delays)
             self.log_signal.emit("键盘操作测试完成")
             return True
         except Exception as e:

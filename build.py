@@ -1,15 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @Time    : 2025 4月 16 22:25
-# @Author  : fenwickxie
-# @PROJECT : officeauto
-# @File    : build.py
-# @Software: PyCharm
+
+"""
+author: fenwickxie
+date: 2025-07-04 09:50:54
+project: auto_send
+filename: build.py
+version: 1.0
+"""
 
 import PyInstaller.__main__
 import platform
 
-version = "1.1.0"  # 版本号
+version = "2.0.0"  # 版本号
 
 # 获取系统名称和架构
 system_name = platform.system()  # 返回 'Windows', 'Linux', 'Darwin' 等
